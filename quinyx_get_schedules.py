@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
-"""Run the Quinyx GetSchedulesV3 call and write every schedule to schedules.csv.
-
-Usage:
-    export QUINYX_API_KEY='your-key'
-    python3 quinyx_get_schedules.py
-"""
+"""Run the Quinyx GetSchedulesV3 test call and write every schedule to schedules.csv."""
 import csv
-import os
 import urllib.request
 from xml.etree import ElementTree as ET
 
 URL = "https://api.quinyx.com/FlexForceWebServices.php"
-FROM_DATE = "2026-10-14"
-TO_DATE = "2026-10-14"
 OUT = "schedules.csv"
 
-ENVELOPE = """<soapenv:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:uri="uri:FlexForce">
+BODY = """<soapenv:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:uri="uri:FlexForce">
    <soapenv:Header/>
    <soapenv:Body>
       <uri:wsdlGetSchedulesV3 soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-         <apiKey xsi:type="xsd:string">{api_key}</apiKey>
+         <apiKey xsi:type="xsd:string">c709-8464-bf8b-3953</apiKey>
          <GetSchedulesV3 xsi:type="flex:GetSchedulesV3" xmlns:flex="https://api.quinyx.com/soap/FlexForce">
-            <fromDate xsi:type="xsd:string">{from_date}</fromDate>
-            <toDate xsi:type="xsd:string">{to_date}</toDate>
+            <fromDate xsi:type="xsd:string">2026-10-14</fromDate>
+            <toDate xsi:type="xsd:string">2026-10-14</toDate>
          </GetSchedulesV3>
       </uri:wsdlGetSchedulesV3>
    </soapenv:Body>
-</soapenv:Envelope>"""
+</soapenv:Envelope>""".encode("utf-8")
 
 
 def local(tag):
@@ -45,11 +37,9 @@ def record_to_row(item):
 
 
 def main():
-    body = ENVELOPE.replace("{api_key}", os.environ["QUINYX_API_KEY"])
-    body = body.replace("{from_date}", FROM_DATE).replace("{to_date}", TO_DATE).encode("utf-8")
     req = urllib.request.Request(
         URL,
-        data=body,
+        data=BODY,
         headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": '"uri:FlexForce/GetSchedulesV3"'},
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
