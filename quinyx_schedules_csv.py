@@ -22,8 +22,7 @@ REQUEST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
     <GetSchedulesV3 xsi:type="tns:GetSchedulesV3">
       <section xsi:type="xsd:string">{section}</section>
       <badgeNo xsi:type="xsd:string">{badge_no}</badgeNo>
-      <employeeId xsi:type="xsd:int">{employee_id}</employeeId>
-      <fromDate xsi:type="xsd:string">{from_date}</fromDate>
+{employee_line}      <fromDate xsi:type="xsd:string">{from_date}</fromDate>
       <fromTime xsi:type="xsd:string">{from_time}</fromTime>
       <toDate xsi:type="xsd:string">{to_date}</toDate>
       <toTime xsi:type="xsd:string">{to_time}</toTime>
@@ -108,11 +107,14 @@ def write_csv(rows, path, delimiter):
 
 
 def build_request(args, api_key):
+    employee_line = ""
+    if args.employee_id is not None:
+        employee_line = f'      <employeeId xsi:type="xsd:int">{int(args.employee_id)}</employeeId>\n'
     return REQUEST_TEMPLATE.format(
         api_key=escape(api_key),
         section=escape(args.section),
         badge_no=escape(args.badge_no),
-        employee_id=int(args.employee_id),
+        employee_line=employee_line,
         from_date=escape(args.from_date),
         from_time=escape(args.from_time),
         to_date=escape(args.to_date),
@@ -124,7 +126,7 @@ def build_request(args, api_key):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--employee-id", required=True, type=int)
+    p.add_argument("--employee-id", type=int, default=None, help="optional; omitted from the request when not given")
     p.add_argument("--from-date", required=True, help="format as the API expects, e.g. 2026-10-01")
     p.add_argument("--to-date", required=True, help="format as the API expects, e.g. 2026-10-31")
     p.add_argument("--from-time", default="")
