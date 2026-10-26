@@ -48,25 +48,35 @@ def local_name(tag):
 
 
 def flatten(elem, prefix=""):
-    """Turn an XML element into a flat {column: value} dict. Nested tags are joined with '.'."""
+    """Turn an XML element into a flat {column: value} dict. Nested tags are joined with '.'.
+
+    Repeated tags under the same parent get a number suffix (subShifts.item_1.id, subShifts.item_2.id).
+    """
     out = {}
+    tags = [local_name(c.tag) for c in elem]
+    seen = {}
     for child in elem:
-        name = prefix + local_name(child.tag)
+        tag = local_name(child.tag)
+        name = prefix + tag
+        if tags.count(tag) > 1:
+            seen[tag] = seen.get(tag, 0) + 1
+            name = f"{name}_{seen[tag]}"
         if len(child):
             out.update(flatten(child, name + "."))
         else:
-            key = name
-            n = 2
-            while key in out:  # repeated leaf tags inside one record
-                key = f"{name}_{n}"
-                n += 1
-            out[key] = (child.text or "").strip()
+            out[name] = (child.text or "").strip()
     return out
+
+
+def is_soap_array(elem):
+    return any(k.endswith("arrayType") for k in elem.attrib)
 
 
 def find_records(root):
     """Return the list of repeated elements (one per schedule). Falls back to the body itself."""
     for parent in root.iter():
+        if is_soap_array(parent):  # e.g. subShifts: nested lists, not the schedule list
+            continue
         tags = [local_name(c.tag) for c in parent]
         repeated = {t for t in tags if tags.count(t) > 1}
         if repeated:
