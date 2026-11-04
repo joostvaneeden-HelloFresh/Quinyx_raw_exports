@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Run the Quinyx GetSchedulesV3 test call for each API key and write every schedule to schedules.csv."""
+"""Run the Quinyx GetSchedulesV3 test call for each API key and write every schedule to schedules.csv.
+
+Shifts with subShifts (e.g. "Task + Route") are split into one row per sub-shift. Each row gets the
+hours of that sub-shift minus any break that falls inside it.
+"""
 import csv
 import urllib.request
 from xml.etree import ElementTree as ET
@@ -25,9 +29,16 @@ ENVELOPE = """<soapenv:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-inst
    </soapenv:Body>
 </soapenv:Envelope>"""
 
+BREAK_TAGS = [("begBreak", "endBreak"), ("begBreak2", "endBreak2"), ("begBreak3", "endBreak3"), ("begBreak4", "endBreak4")]
+
 
 def local(tag):
     return tag.split("}", 1)[-1]
+
+
+def minutes(time_text):
+    h, m, s = (int(p) for p in time_text.split(":"))
+    return h * 60 + m + s / 60
 
 
 def record_to_row(item):
@@ -39,6 +50,41 @@ def record_to_row(item):
         else:
             row[name] = (child.text or "").strip()
     return row
+
+
+def split_hours(beg, end, breaks):
+    """Hours between beg and end (in minutes), minus the overlap with each break."""
+    total = end - beg
+    for break_beg, break_end in breaks:
+        overlap = min(end, break_end) - max(beg, break_beg)
+        if overlap > 0:
+            total -= overlap
+    return round(total / 60, 4)
+
+
+def schedule_rows(item):
+    base = record_to_row(item)
+    base.pop("subShifts", None)
+    subs = item.find("subShifts")
+    if subs is None or not len(subs):
+        return [base]
+
+    breaks = []
+    for beg_tag, end_tag in BREAK_TAGS:
+        beg, end = item.findtext(beg_tag, ""), item.findtext(end_tag, "")
+        if beg and end:
+            breaks.append((minutes(beg), minutes(end)))
+
+    rows = []
+    for sub in subs:
+        row = dict(base)
+        row["parentCategoryName"] = base.get("categoryName", "")
+        for child in sub:
+            name = "subShiftId" if local(child.tag) == "id" else local(child.tag)
+            row[name] = (child.text or "").strip()
+        row["hours"] = split_hours(minutes(row["begTime"]), minutes(row["endTime"]), breaks)
+        rows.append(row)
+    return rows
 
 
 def fetch(api_key):
@@ -55,16 +101,17 @@ def main():
     rows = []
     for key_nr, api_key in enumerate(API_KEYS, start=1):
         root = fetch(api_key)
-        found = [record_to_row(e) for e in root.iter() if local(e.tag) == "item" and e.find("{*}restId") is not None]
+        items = [e for e in root.iter() if local(e.tag) == "item" and e.find("{*}restId") is not None]
+        found = [row for item in items for row in schedule_rows(item)]
         rows += [{"key_nr": key_nr, **row} for row in found]
-        print(f"key {key_nr}: {len(found)} schedules")
+        print(f"key {key_nr}: {len(items)} schedules, {len(found)} rows")
 
     columns = list(dict.fromkeys(k for row in rows for k in row))
     with open(OUT, "w", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"{len(rows)} schedules written to {OUT}")
+    print(f"{len(rows)} rows written to {OUT}")
 
 
 if __name__ == "__main__":
